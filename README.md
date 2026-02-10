@@ -21,6 +21,12 @@ A modern web application that converts 2D images into 3D printable lithophane ST
 - **Geometry Settings**:
   - **Base Thickness**: Add a solid base layer for structural integrity.
   - **Dimensions**: Set physical print width and min/max heights in mm.
+- **Border Generator**:
+  - **Styles**: Choose from Flat, Rounded, or Chamfer border profiles.
+  - **Customization**: Adjust border width and depth to frame your lithophane.
+- **Stand Generator**:
+  - **Automatic Fit**: Generates a stand perfectly sized for your lithophane's thickness.
+  - **Ready-to-Print**: Downloads as a separate STL file.
 
 ## Tech Stack
 
