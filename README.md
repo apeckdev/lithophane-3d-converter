@@ -1,5 +1,10 @@
 # Lithophane 3D Converter
 
+<p align="center">
+  <img src="docs/images/lithophane-preview.png" alt="Lithophane Preview" width="45%" />
+  <img src="docs/images/stand-preview.png" alt="Stand Generator" width="45%" />
+</p>
+
 A modern web application that converts 2D images into 3D printable lithophane STLs. Optimized for creating layered multi-color prints (Hueforge-style) or standard high-quality lithophanes.
 
 ## Features
@@ -40,7 +45,7 @@ A modern web application that converts 2D images into 3D printable lithophane ST
 3.  Run the development server:
     ```bash
     npm run dev
-    ```
+    ``` 
 
 4.  Build for production:
     ```bash
