@@ -7,6 +7,8 @@ import { DEFAULT_OPTIONS } from './lib/types';
 import type { ProcessingOptions } from './lib/types';
 import { processImage } from './lib/processing';
 import type { ProcessResult } from './lib/processing';
+import { generateStand } from './lib/standGenerator';
+
 
 function App() {
   const [file, setFile] = useState<File | null>(null);
@@ -18,6 +20,8 @@ function App() {
   const [options, setOptions] = useState<ProcessingOptions>(DEFAULT_OPTIONS);
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<ProcessResult | null>(null);
+  const [isGeneratingStand, setIsGeneratingStand] = useState(false);
+
 
   const handleImageSelect = (selectedFile: File) => {
     setFile(selectedFile);
@@ -74,6 +78,23 @@ function App() {
     link.download = `lithophane-${options.layerCount}layers.stl`;
     link.click();
   };
+
+  const handleDownloadStand = async () => {
+    setIsGeneratingStand(true);
+    try {
+      const thickness = options.baseMm + options.maxHeight;
+      const blob = await generateStand(thickness);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `stand-${thickness.toFixed(1)}mm.stl`;
+      link.click();
+    } catch (e) {
+      console.error("Failed to generate stand", e);
+    } finally {
+      setIsGeneratingStand(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 flex flex-col">
@@ -183,6 +204,30 @@ function App() {
                     Includes {result ? (result.stlBlob.size / 1024 / 1024).toFixed(1) : 0}MB mesh
                   </p>
                 </div>
+
+                {/* Stand Generator Section */}
+                <div className="pt-6 border-t border-white/10 mt-6 space-y-3">
+                  <h4 className="text-sm font-semibold text-white/80">Accessories</h4>
+                  <p className="text-xs text-white/50 mb-2">
+                    Generate a custom stand optimized for your current settings.
+                    Perfect for back-lighting.
+                  </p>
+                  {isGeneratingStand ? (
+                    <div className="w-full py-2 bg-white/5 rounded-lg flex items-center justify-center gap-2 text-white/50 cursor-not-allowed">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span className="text-sm">Building Stand...</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleDownloadStand}
+                      className="w-full py-2 bg-white/10 hover:bg-white/20 text-white/80 text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+                      title="Download a stand fitted for this lithophane"
+                    >
+                      <Cuboid className="w-4 h-4" />
+                      Download Fitted Stand
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -210,9 +255,10 @@ function App() {
               )}
             </div>
           </div>
-        )}
-      </main>
-    </div>
+        )
+        }
+      </main >
+    </div >
   );
 }
 
