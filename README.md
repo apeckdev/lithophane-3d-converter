@@ -33,8 +33,8 @@ A modern web application that converts 2D images into 3D printable lithophane ST
 
 1.  Clone the repository:
     ```bash
-    git clone https://github.com/apeckdev/lithopane-3d-converter.git
-    cd lithopane-3d-converter
+    git clone https://github.com/apeckdev/lithophane-3d-converter.git
+    cd lithophane-3d-converter
     ```
 
 2.  Install dependencies:
