@@ -24,7 +24,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
         }
     }, [options.layerCount]); // Only check when layer count changes (or on mount)
 
-    const updateOption = <K extends keyof ProcessingOptions>(key: K, value: number | boolean | boolean[]) => {
+    const updateOption = <K extends keyof ProcessingOptions>(key: K, value: ProcessingOptions[K]) => {
         // Special handling for layerCount to resize visibility
         if (key === 'layerCount') {
             const count = value as number;
@@ -213,16 +213,69 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                 />
             </div>
 
-            <div className="pt-4 border-t border-white/10">
-                <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                        type="checkbox"
-                        checked={options.invert}
-                        onChange={(e) => updateOption('invert', e.target.checked)}
-                        className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-primary transition-colors cursor-pointer"
-                    />
-                    <span className="text-sm text-white/80 group-hover:text-white transition-colors">Invert Heights (Darker = Higher)</span>
-                </label>
+            <label className="flex items-center gap-3 cursor-pointer group">
+                <input
+                    type="checkbox"
+                    checked={options.invert}
+                    onChange={(e) => updateOption('invert', e.target.checked)}
+                    className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-primary transition-colors cursor-pointer"
+                />
+                <span className="text-sm text-white/80 group-hover:text-white transition-colors">Invert Heights (Darker = Higher)</span>
+            </label>
+
+            {/* Border Settings */}
+            <div className="pt-4 border-t border-white/10 space-y-4">
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium flex items-center gap-2 text-white/90">
+                        <span className="text-primary">▢</span>
+                        Border
+                    </label>
+                    <select
+                        value={options.border?.type || 'none'}
+                        onChange={(e) => updateOption('border' as any, { ...options.border, type: e.target.value as any })}
+                        className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-primary/50"
+                    >
+                        <option value="none">None</option>
+                        <option value="flat">Flat</option>
+                        <option value="rounded">Rounded</option>
+                        <option value="chamfer">Chamfer</option>
+                    </select>
+                </div>
+
+                {options.border && options.border.type !== 'none' && (
+                    <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-xs text-white/50">Width (mm)</span>
+                                <span className="text-xs font-mono text-primary">{options.border.widthMm}mm</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="1"
+                                max="20"
+                                step="1"
+                                value={options.border.widthMm}
+                                onChange={(e) => updateOption('border' as any, { ...options.border, widthMm: parseFloat(e.target.value) })}
+                                className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-xs text-white/50">Depth (mm)</span>
+                                <span className="text-xs font-mono text-primary">{options.border.depthMm}mm</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="0.2"
+                                max="10"
+                                step="0.2"
+                                value={options.border.depthMm}
+                                onChange={(e) => updateOption('border' as any, { ...options.border, depthMm: parseFloat(e.target.value) })}
+                                className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                    </div>
+                )}
             </div>
         </div >
     );

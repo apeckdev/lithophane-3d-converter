@@ -69,6 +69,8 @@ export async function processImage(
                         val = layerIdx * step;
                     }
 
+                    // ... (Quantize logic above)
+
                     // Apply Layer Visibility Mask
                     let isVisible = true;
                     if (options.layerVisibility && options.layerVisibility.length === levels) {
@@ -78,36 +80,110 @@ export async function processImage(
                         }
                     }
 
-                    // Invert just affects depth, but not layerIdx?
-                    // Usually "Dark" is Layer 0 in a lithophane context unless inverted.
-                    // If we invert, "Dark" maps to High Z (Layer N-1).
-                    // So if we invert, the layerIdx maps to (levels - 1 - layerIdx)?
-                    // Or does the user think "Layer 1 = Black"?
-                    // Let's assume Layer 1 is always Lowest (Z=0).
-                    // If Inverted, White is Lowest (Z=0).
-                    // So Layer 1 means "The Stuff at the Bottom".
-                    // The logic below calculates `depth` then sets Z.
-                    // If `options.invert` is true, `val` (gray) 0 -> `depth` 1.
-                    // Which "Layer" is that? High Layer.
-                    // If user toggles "Layer 1" (Bottom), they want to remove the Bottom.
-                    // If Inverted, Bottom is White.
-                    // So we should calculate `physicalLayerIdx` roughly proportional to `depth`.
-
                     let depth = val;
                     if (options.invert) {
                         depth = 1.0 - val;
                     }
 
-                    // Re-calculate effective layer index based on final depth for masking?
-                    // If user says "Toggle Layer 1", they mean Z=0 layer.
-                    // So index = Math.round(depth * (levels - 1))
+                    // --- BORDER GENERATION LOGIC ---
+                    if (options.border && options.border.type !== 'none') {
+                        const bWidthMm = options.border.widthMm;
+                        const bDepthMm = options.border.depthMm;
 
-                    const physicalLayerIdx = Math.round(depth * (levels - 1));
-                    if (options.layerVisibility && options.layerVisibility.length === levels) {
-                        if (options.layerVisibility[physicalLayerIdx] !== undefined) {
-                            isVisible = options.layerVisibility[physicalLayerIdx];
+                        // Convert border width from mm to pixels
+                        const pixelSizeMm = options.pixelSize || 0.15;
+                        const borderPixels = Math.round(bWidthMm / pixelSizeMm);
+
+                        // Current pixel coordinates
+                        const px = (i / 4) % targetWidth;
+                        const py = Math.floor((i / 4) / targetWidth);
+
+                        // Distance from nearest edge
+                        const distLeft = px;
+                        const distRight = targetWidth - 1 - px;
+                        const distTop = py;
+                        const distBottom = targetHeight - 1 - py;
+                        const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+                        if (minDist < borderPixels) {
+                            // We are in the border region
+                            // Normalized position within border (0 = outside edge, 1 = inside edge)
+                            const t = minDist / borderPixels;
+
+                            // Calculate Physical Height of Border
+                            // The image heights range from [minHeight, maxHeight]
+                            // The border depthMm is "Height above base". 
+                            // We need to map this back to the "0-1" depth scale used here? 
+                            // WAIT: The depth array stores 0-1 values which are LATER mapped to [min, max].
+                            // It's cleaner to calculate the ACTUAL Z desired, then reverse-map to 0-1?
+                            // Or just store the Z override directly?
+                            // The depthData array is Float32. It currently stores 0-1.
+                            // The mesh gen step does: z = base + min + depth * (max - min)
+                            // So: depth = (TargetZ - base - min) / (max - min)
+
+                            const zMin = options.minHeight;
+                            const zMax = options.maxHeight;
+                            const range = zMax - zMin;
+
+                            let targetBorderZ = 0;
+
+                            if (options.border.type === 'flat') {
+                                targetBorderZ = bDepthMm;
+                            } else if (options.border.type === 'chamfer') {
+                                // Linear ramp: 0 at inside, full depth at outside? 
+                                // Actually usually borders are thicker than image.
+                                // Let's make it: Outside edge = bDepth, Inside edge = Image Pixel? 
+                                // Or Inside edge = bDepth too?
+                                // "Chamfer" usually means angled. 
+                                // Let's try: Outside = bDepth, Inside = bDepth, but maybe allow a bevel?
+                                // Let's stick to simple profiles first. 
+                                // Chamfer here will mean: Ramps from 0 (at image join) up to bDepth (at outside)?
+                                // No, that's a frame. 
+                                // Let's make "Chamfer" = Angled Profile.
+                                // Height at outside = bDepth. Height at inside = bDepth.
+                                // Wait, standard frame is just flat.
+
+                                // Let's define:
+                                // Flat: Constant height = bDepth.
+                                // Chamfer: Angled from bDepth (inner) to 0 (outer)? No.
+                                // Let's do: Inner Edge = Matches Image? No, that's hard.
+                                // Let's do: Constant Height `bDepth` but with a 45-degree chamfer on the VERY edge or the join?
+                                // Let's simplify:
+                                // Chamfer: Linear ramp from Base (0) at outside, to bDepth at (borderWidth).
+                                targetBorderZ = t * bDepthMm;
+                            } else if (options.border.type === 'rounded') {
+                                // Circular profile
+                                // sin(t * PI/2) * depth?
+                                targetBorderZ = Math.sin(t * (Math.PI / 2)) * bDepthMm;
+                            }
+
+                            // Ensure border sits on base
+                            // The loop below adds baseMm/minHeight. 
+                            // If user specifies 3mm border depth, they likely mean "Total height 3mm".
+                            // But our Z calc is: zVal = baseMm + minHeight + depth * range.
+                            // This is getting complex to mix relative 0-1 image data with absolute border mm.
+
+                            // Let's encode a "Literal Z Override" signal? 
+                            // Or just map it back. 
+
+                            // If we want total height = targetBorderZ (ignoring base for now? No, border includes base?)
+                            // Let's say bDepth is "Height ABOVE Base".
+                            // So Total Z = baseMm + targetBorderZ.
+
+                            // We need: baseMm + min + val*range = baseMm + targetBorderZ
+                            // min + val*range = targetBorderZ
+                            // val = (targetBorderZ - min) / range
+
+                            let borderVal = (targetBorderZ - zMin) / range;
+
+                            // Clamp? Maybe not, allow it to stick out.
+                            depth = borderVal;
+
+                            // Borders are always solid/visible
+                            isVisible = true;
                         }
                     }
+                    // --- END BORDER LOGIC ---
 
                     if (!isVisible) {
                         depth = -1; // Sentinel for "removed"
@@ -122,7 +198,11 @@ export async function processImage(
                         data[i + 2] = 0;
                         data[i + 3] = 0; // Transparent
                     } else {
-                        const displayGray = Math.floor(depth * 255);
+                        // Visualization needs to handle values > 1 or < 0 if the border is huge
+                        let displayGray = Math.floor(depth * 255);
+                        // Clamp for display
+                        displayGray = Math.max(0, Math.min(255, displayGray));
+
                         data[i] = displayGray;
                         data[i + 1] = displayGray;
                         data[i + 2] = displayGray;
