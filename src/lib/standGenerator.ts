@@ -5,7 +5,7 @@ export async function generateStand(thicknessMm: number): Promise<Blob> {
     return new Promise((resolve, reject) => {
         try {
             // Stand Parameters
-            const tolerance = 0.6; // Extra space for fit
+            const tolerance = 2.1; // Extra space for fit
             const slotWidth = thicknessMm + tolerance;
             const floorY = 3; // Thickness of the floor under the lithophane
             const tiltAngle = 10 * (Math.PI / 180); // 10 degrees tilt back
