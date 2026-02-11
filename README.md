@@ -9,24 +9,26 @@ A modern web application that converts 2D images into 3D printable lithophane ST
 
 ## Features
 
-- **Instant 3D Preview**: Visualize your lithophane layer by layer in real-time.
+- **Instant 3D Preview**: Visualize your lithophane layer by layer in real-time. Switch between 2D grayscale and 3D mesh views.
 - **Image Cropping**: Crop your uploaded images directly in the app to focus on the subject.
-- **Advanced Processing**:
-  - **Smoothing**: Apply adjustable blur to reduce noise and jagged edges.
-  - **Resolution Control**: Balance print quality (0.1mm) vs file size and speed.
-  - **Invert Mode**: Support for both standard lithophanes (Darker = Hight) and inverted.
+- **Image Processing**:
+  - **Adjustments**: Fine-tune *Contrast*, *Brightness*, and *Gamma* directly in the browser.
+  - **Background Removal**: Automatically remove backgrounds with adjustable thresholding.
+- **Shape Variations**:
+  - **Flat**: Standard rectangular lithophanes.
+  - **Curved**: *Cylinder*, *Arc*, and *Sphere* mappings for lampshades and ornaments.
+- **Advanced Frame Styles**:
+  - **Border Profiles**: *Flat*, *Rounded*, *Chamfer*, *Classic Frame* (decorative), and *Oval*.
+  - **Mounting Holes**: Drill precise mounting holes through the model for hanging or mounting.
 - **Layer Control**:
   - **Layer Count**: Quantize your image into specific numbers of height layers (great for filament swapping).
   - **Layer Visibility**: Toggle specific layers on/off to create cutouts or transparent styles.
 - **Geometry Settings**:
   - **Base Thickness**: Add a solid base layer for structural integrity.
   - **Dimensions**: Set physical print width and min/max heights in mm.
-- **Border Generator**:
-  - **Styles**: Choose from Flat, Rounded, or Chamfer border profiles.
-  - **Customization**: Adjust border width and depth to frame your lithophane.
-- **Stand Generator**:
-  - **Automatic Fit**: Generates a stand perfectly sized for your lithophane's thickness.
-  - **Ready-to-Print**: Downloads as a separate STL file.
+- **Workflow**:
+  - **Persistence**: Settings are automatically saved to your browser so you never lose your work.
+  - **Stand Generator**: Create a custom-fitted stand for your specific lithophane dimensions.
 
 ## Tech Stack
 
@@ -63,11 +65,11 @@ A modern web application that converts 2D images into 3D printable lithophane ST
 1.  **Upload**: Drag & drop an image or select one from your device.
 2.  **Crop**: Adjust the crop frame to select your desired print area.
 3.  **Adjust**: Use the settings panel to tune:
-    *   **Layer Count**: Number of distinct height levels.
-    *   **Min/Max Height**: The physical thickness range of the print.
-    *   **Smoothing**: Reduce noise if the image is grainy.
-    *   **Resolution**: Lower mm/px gives more detail but larger files.
-    *   **Base Thickness**: Add a raft/base for stability.
+    *   **Image**: Adjust contrast/brightness and remove background.
+    *   **Shape**: Choose between Flat, Cylinder, Arc, or Sphere.
+    *   **Frame**: Select a border style (e.g., Classic Frame) and enable mounting holes.
+    *   **Layers**: Set layer count and physical thickness (Min/Max Height).
+    *   **Quality**: Adjust pixel resolution and smoothing.
 4.  **Download**: Click "Download STL" to get your file ready for your slicer.
 
 ## License

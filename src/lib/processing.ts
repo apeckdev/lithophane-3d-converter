@@ -5,6 +5,7 @@ import { STLExporter } from 'three-stdlib';
 export interface ProcessResult {
     previewUrl: string;
     stlBlob: Blob;
+    geometry: THREE.BufferGeometry;
     width: number;
     height: number;
 }
@@ -37,6 +38,9 @@ export async function processImage(
                 const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
                 const data = imageData.data;
 
+                // Apply Image Adjustments (Contrast, Brightness, Gamma)
+                applyImageAdjustments(data, options);
+
                 // Apply smoothing if requested
                 if (options.smoothing > 0) {
                     // max radius ~3px for reasonable blur
@@ -56,6 +60,15 @@ export async function processImage(
                     // Luminance
                     const gray = 0.299 * r + 0.587 * g + 0.114 * b;
 
+                    // Background Removal
+                    // If enabled and pixel is brighter than threshold (assuming white background)
+                    // Or we could trigger on alpha?
+                    // Let's stick to luminance threshold for now (e.g., remove white)
+                    let isBackground = false;
+                    if (options.backgroundRemoval && gray > (options.backgroundThreshold ?? 250)) {
+                        isBackground = true;
+                    }
+
                     // Quantize
                     const levels = options.layerCount;
                     // Normalize to 0-1
@@ -69,11 +82,9 @@ export async function processImage(
                         val = layerIdx * step;
                     }
 
-                    // ... (Quantize logic above)
-
                     // Apply Layer Visibility Mask
-                    let isVisible = true;
-                    if (options.layerVisibility && options.layerVisibility.length === levels) {
+                    let isVisible = !isBackground;
+                    if (isVisible && options.layerVisibility && options.layerVisibility.length === levels) {
                         // Be careful with index bounds
                         if (layerIdx >= 0 && layerIdx < levels) {
                             isVisible = options.layerVisibility[layerIdx];
@@ -85,102 +96,166 @@ export async function processImage(
                         depth = 1.0 - val;
                     }
 
+                    // --- MOUNTING HOLE LOGIC ---
+                    if (options.mounting && options.mounting.enabled) {
+                        const pixelSizeMm = options.pixelSize || 0.15;
+                        const holeRadiusPx = (options.mounting.diameterMm / 2) / pixelSizeMm;
+                        const holeOffsetPx = options.mounting.offsetMm / pixelSizeMm;
+
+                        // Hole is at Top-Center
+                        const centerX = targetWidth / 2;
+                        const centerY = holeOffsetPx; // From top (y=0)
+
+                        // Distance to hole center
+                        const px = (i / 4) % targetWidth;
+                        const py = Math.floor((i / 4) / targetWidth);
+                        const dx = px - centerX;
+                        const dy = py - centerY;
+                        const distToHole = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distToHole < holeRadiusPx) {
+                            // Inside hole -> Transparent
+                            depth = -1;
+                        }
+                    }
+
                     // --- BORDER GENERATION LOGIC ---
-                    if (options.border && options.border.type !== 'none') {
+                    if (depth !== -1 && options.border && options.border.type !== 'none') {
                         const bWidthMm = options.border.widthMm;
                         const bDepthMm = options.border.depthMm;
-
-                        // Convert border width from mm to pixels
                         const pixelSizeMm = options.pixelSize || 0.15;
                         const borderPixels = Math.round(bWidthMm / pixelSizeMm);
 
-                        // Current pixel coordinates
                         const px = (i / 4) % targetWidth;
                         const py = Math.floor((i / 4) / targetWidth);
 
-                        // Distance from nearest edge
-                        const distLeft = px;
-                        const distRight = targetWidth - 1 - px;
-                        const distTop = py;
-                        const distBottom = targetHeight - 1 - py;
-                        const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+                        let isInBorder = false;
+                        let t = 0; // 0=Outer Edge, 1=Inside (Touch Image) -> Wait, logic below used t=minDist/borderPixels (0=in, 1=out? No 0=edge)
 
-                        if (minDist < borderPixels) {
-                            // We are in the border region
-                            // Normalized position within border (0 = outside edge, 1 = inside edge)
-                            const t = minDist / borderPixels;
+                        if (options.border.type === 'oval') {
+                            // --- OVAL MODE ---
+                            // Normalized coordinates -1 to +1
+                            const u = (px / (targetWidth - 1)) * 2 - 1;
+                            const v = (py / (targetHeight - 1)) * 2 - 1;
 
-                            // Calculate Physical Height of Border
-                            // The image heights range from [minHeight, maxHeight]
-                            // The border depthMm is "Height above base". 
-                            // We need to map this back to the "0-1" depth scale used here? 
-                            // WAIT: The depth array stores 0-1 values which are LATER mapped to [min, max].
-                            // It's cleaner to calculate the ACTUAL Z desired, then reverse-map to 0-1?
-                            // Or just store the Z override directly?
-                            // The depthData array is Float32. It currently stores 0-1.
-                            // The mesh gen step does: z = base + min + depth * (max - min)
-                            // So: depth = (TargetZ - base - min) / (max - min)
+                            // Distance from center (Elliptical)
+                            // d = sqrt(u^2 + v^2). If d > 1, outside.
+                            const d = Math.sqrt(u * u + v * v);
 
+                            if (d > 1.0) {
+                                // Strictly outside the oval -> Transparent? 
+                                // Or should the border be *within* the square?
+                                // "Oval" usually means the whole lithophane is oval.
+                                // So pixels > 1.0 are transparent (cut away).
+                                depth = -1;
+                            } else {
+                                // Check if in border region
+                                // Border Width in UV space?
+                                // This is tricky because aspect ratio means Width != Height.
+                                // Border is defined in mm.
+                                // Calculate distance to edge in mm approx?
+                                // Let's simplify: map borderPixels to approx UV width?
+                                // uWidth = 2.0. widthPx = targetWidth.
+                                // borderU = (borderPixels / targetWidth) * 2;
+                                const borderU = (borderPixels / targetWidth) * 2;
+
+                                // Simple radial check: if d > (1.0 - borderU) -> In Border
+                                // Note: varies for X vs Y if rectangle, but ellipse scales nicely.
+                                // This produces a uniform thickness border in UV space, 
+                                // which means physically it might be thicker on X or Y if aspect ratio is not 1.
+                                // For true constant thickness, we need Signed Distance Field of Ellipse, expensive.
+                                // Let's scale V by aspect ratio? 
+                                // Let's Stick to UV metric for now, it's "good enough" for an "Oval Frame" look.
+
+                                if (d > (1.0 - borderU)) {
+                                    isInBorder = true;
+                                    // t: 0 at outer edge (d=1), 1 at inner edge (d=1-borderU)
+                                    // (1 - d) is dist from outer edge.
+                                    // t = (1 - d) / borderU;
+                                    t = (1.0 - d) / borderU;
+                                }
+                            }
+
+                        } else {
+                            // --- RECTANGULAR MODES ---
+                            const distLeft = px;
+                            const distRight = targetWidth - 1 - px;
+                            const distTop = py;
+                            const distBottom = targetHeight - 1 - py;
+                            const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+                            if (minDist < borderPixels) {
+                                isInBorder = true;
+                                // t: 0 at edge, 1 at inner
+                                t = minDist / borderPixels;
+                            }
+                        }
+
+                        if (isInBorder && depth !== -1) {
+                            // Calculate Profile Height
                             const zMin = options.minHeight;
                             const zMax = options.maxHeight;
                             const range = zMax - zMin;
 
+                            // All profiles: t is 0 (OUTER EDGE) to 1 (INNER EDGE/IMAGE START)
+                            // We want border to usually be high at outer, maybe low at inner?
+                            // Or just override.
+
                             let targetBorderZ = 0;
 
-                            if (options.border.type === 'flat') {
-                                targetBorderZ = bDepthMm;
-                            } else if (options.border.type === 'chamfer') {
-                                // Linear ramp: 0 at inside, full depth at outside? 
-                                // Actually usually borders are thicker than image.
-                                // Let's make it: Outside edge = bDepth, Inside edge = Image Pixel? 
-                                // Or Inside edge = bDepth too?
-                                // "Chamfer" usually means angled. 
-                                // Let's try: Outside = bDepth, Inside = bDepth, but maybe allow a bevel?
-                                // Let's stick to simple profiles first. 
-                                // Chamfer here will mean: Ramps from 0 (at image join) up to bDepth (at outside)?
-                                // No, that's a frame. 
-                                // Let's make "Chamfer" = Angled Profile.
-                                // Height at outside = bDepth. Height at inside = bDepth.
-                                // Wait, standard frame is just flat.
-
-                                // Let's define:
-                                // Flat: Constant height = bDepth.
-                                // Chamfer: Angled from bDepth (inner) to 0 (outer)? No.
-                                // Let's do: Inner Edge = Matches Image? No, that's hard.
-                                // Let's do: Constant Height `bDepth` but with a 45-degree chamfer on the VERY edge or the join?
-                                // Let's simplify:
-                                // Chamfer: Linear ramp from Base (0) at outside, to bDepth at (borderWidth).
-                                targetBorderZ = t * bDepthMm;
-                            } else if (options.border.type === 'rounded') {
-                                // Circular profile
-                                // sin(t * PI/2) * depth?
-                                targetBorderZ = Math.sin(t * (Math.PI / 2)) * bDepthMm;
+                            switch (options.border.type) {
+                                case 'flat':
+                                    targetBorderZ = bDepthMm;
+                                    break;
+                                case 'oval': // Oval uses rounded profile by default, or flat? 
+                                case 'rounded':
+                                    // Rounded: sin(t * PI/2). 0->0, 1->1 ? 
+                                    // We want t=0 (edge) to be low? or high?
+                                    // Usually frame is thickest?
+                                    // Let's say: Rounded means half-pipe.
+                                    // 0 -> 0, 0.5 -> 1, 1 -> 0?
+                                    // Or Quarter pipe: 0 -> 1, 1 -> Image?
+                                    // Let's do Quarter Pipe: High at edge (t=0), Low at image (t=1).
+                                    // cos(t * PI/2)? t=0->1, t=1->0.
+                                    targetBorderZ = Math.cos(t * Math.PI / 2) * bDepthMm;
+                                    break;
+                                case 'chamfer':
+                                    // Linear ramp. High at edge (0), Low at image (1)
+                                    targetBorderZ = (1 - t) * bDepthMm;
+                                    break;
+                                case 'frame':
+                                    // Decorative Profile
+                                    // High at edge, dip, bead, chamfer.
+                                    // t: 0 -> 1
+                                    if (t < 0.2) {
+                                        // Outer Lip (Flat High)
+                                        targetBorderZ = bDepthMm;
+                                    } else if (t < 0.4) {
+                                        // Dip (Grove)
+                                        // Normalize t2 from 0 to 1 over 0.2-0.4
+                                        const t2 = (t - 0.2) / 0.2;
+                                        // Cosine dip?
+                                        targetBorderZ = bDepthMm * (0.8 - (Math.sin(t2 * Math.PI) * 0.2));
+                                    } else if (t < 0.8) {
+                                        // Bead (Round bump)
+                                        const t3 = (t - 0.4) / 0.4;
+                                        // sin 0->PI
+                                        targetBorderZ = bDepthMm * (0.6 + (Math.sin(t3 * Math.PI) * 0.4));
+                                    } else {
+                                        // Inner Chamfer (Slope down to image)
+                                        // t 0.8 -> 1.0
+                                        // Height: 0.6 -> 0 (or image height?)
+                                        const t4 = (t - 0.8) / 0.2;
+                                        targetBorderZ = bDepthMm * 0.6 * (1 - t4);
+                                    }
+                                    break;
                             }
 
-                            // Ensure border sits on base
-                            // The loop below adds baseMm/minHeight. 
-                            // If user specifies 3mm border depth, they likely mean "Total height 3mm".
-                            // But our Z calc is: zVal = baseMm + minHeight + depth * range.
-                            // This is getting complex to mix relative 0-1 image data with absolute border mm.
-
-                            // Let's encode a "Literal Z Override" signal? 
-                            // Or just map it back. 
-
-                            // If we want total height = targetBorderZ (ignoring base for now? No, border includes base?)
-                            // Let's say bDepth is "Height ABOVE Base".
-                            // So Total Z = baseMm + targetBorderZ.
-
-                            // We need: baseMm + min + val*range = baseMm + targetBorderZ
-                            // min + val*range = targetBorderZ
-                            // val = (targetBorderZ - min) / range
-
+                            // Convert MM Z to 0-1 Depth
                             let borderVal = (targetBorderZ - zMin) / range;
 
-                            // Clamp? Maybe not, allow it to stick out.
+                            // Blend if transparency? No, border is solid.
                             depth = borderVal;
-
-                            // Borders are always solid/visible
-                            isVisible = true;
                         }
                     }
                     // --- END BORDER LOGIC ---
@@ -226,28 +301,123 @@ export async function processImage(
                 const cellH = heightMm / (h - 1);
 
                 // Vertices
+                // Vertices
+                const shape = options.shape || { type: 'flat', angle: 180 };
+
                 for (let y = 0; y < h; y++) {
                     for (let x = 0; x < w; x++) {
                         const pixelIdx = (y * w) + x;
                         const depth = depthData[pixelIdx];
 
                         // Base Layer support
-                        // If masked (depth < 0), collapses to just the base layer thickness.
-                        // If active, stacks on top of base layer + minHeight.
-                        let zVal = options.baseMm;
-
+                        let thickness = options.baseMm;
                         if (depth >= 0) {
-                            zVal += options.minHeight + (depth * (options.maxHeight - options.minHeight));
+                            thickness += options.minHeight + (depth * (options.maxHeight - options.minHeight));
                         }
 
-                        // Coordinate centered
-                        const pX = (x * cellW) - (widthMm / 2);
-                        const pY = -((y * cellH) - (heightMm / 2));
+                        // Normalized coordinates (0 to 1)
+                        const u = x / (w - 1);
+                        const v = y / (h - 1);
+
+                        // --- Shape Generation ---
+                        let vx = 0, vy = 0, vz = 0; // Surface vertex
+                        let bx = 0, by = 0, bz = 0; // Base vertex (thickness 0, or inner radius)
+
+                        if (shape.type === 'cylinder') {
+                            // Cylindrical Wrap
+                            // Width matches circumference? Or Diameter? 
+                            // Let's assume WidthMm = Circumference of the base cylinder. 
+                            // Radius = Width / 2PI
+                            const baseRadius = widthMm / (2 * Math.PI);
+                            const rOuter = baseRadius + thickness;
+                            const rInner = baseRadius; // Flat base is now the inner cylinder wall
+
+                            // Angle from 0 to 2PI
+                            // We might want to offset by -PI/2 to center front?
+                            const theta = u * 2 * Math.PI;
+
+                            // Map Y to Y (height)
+                            // Centered vertically
+                            const yPos = -((y * cellH) - (heightMm / 2));
+
+                            vx = rOuter * Math.cos(theta);
+                            vz = rOuter * Math.sin(theta);
+                            vy = yPos;
+
+                            bx = rInner * Math.cos(theta);
+                            bz = rInner * Math.sin(theta);
+                            by = yPos;
+
+                        } else if (shape.type === 'arc') {
+                            // Arc Segment
+                            // WidthMm = Arc Length
+                            // Angle specified in options (e.g. 90, 120, 180)
+                            const angleRad = (shape.angle * Math.PI) / 180;
+                            // ArcLength = Radius * Angle
+                            // Radius = ArcLength / Angle
+                            const baseRadius = widthMm / angleRad;
+
+                            const rOuter = baseRadius + thickness;
+                            const rInner = baseRadius;
+
+                            // Remap U (0..1) to (-Angle/2 .. +Angle/2) to center it
+                            const theta = (u - 0.5) * angleRad;
+                            // Rotate so the center of the arc faces "Back" (or front)?
+                            // Usually lithophanes are viewed from the "flat" side if inverted?
+                            // Let's say center is at Z=Radius, facing origin?
+                            // Standard math: cos(0)=1 (X axis). sin(0)=0.
+                            // Let's rotate by -PI/2 so center is at (0, -R)?? No.
+                            // Let's just use standard polar, but adding PI/2 to rotate face to camera?
+                            const offset = -Math.PI / 2;
+
+                            const yPos = -((y * cellH) - (heightMm / 2));
+
+                            vx = rOuter * Math.cos(theta + offset);
+                            vz = rOuter * Math.sin(theta + offset);
+                            vy = yPos;
+
+                            bx = rInner * Math.cos(theta + offset);
+                            bz = rInner * Math.sin(theta + offset);
+                            by = yPos;
+
+                        } else if (shape.type === 'sphere') {
+                            // Sphere / Moon Mode
+                            // WidthMm = Circumference (Equator)
+                            const baseRadius = widthMm / (2 * Math.PI);
+                            const rOuter = baseRadius + thickness;
+                            const rInner = baseRadius;
+
+                            // U -> Longitude (0 to 2PI)
+                            const theta = u * 2 * Math.PI;
+                            // V -> Latitude (0 to PI) - North Pole to South Pole
+                            const phi = v * Math.PI;
+
+                            // Spherical conversion
+                            // x = r * sin(phi) * cos(theta)
+                            // z = r * sin(phi) * sin(theta) // Swapped Y/Z for ThreeJS up-axis?
+                            // y = r * cos(phi)
+
+                            vx = rOuter * Math.sin(phi) * Math.cos(theta);
+                            vz = rOuter * Math.sin(phi) * Math.sin(theta);
+                            vy = rOuter * Math.cos(phi);
+
+                            bx = rInner * Math.sin(phi) * Math.cos(theta);
+                            bz = rInner * Math.sin(phi) * Math.sin(theta);
+                            by = rInner * Math.cos(phi);
+
+                        } else {
+                            // --- FLAT (Default) ---
+                            const pX = (x * cellW) - (widthMm / 2);
+                            const pY = -((y * cellH) - (heightMm / 2));
+
+                            vx = pX; vy = pY; vz = thickness;
+                            bx = pX; by = pY; bz = 0;
+                        }
 
                         // Top Vertex
-                        vertices.push(pX, pY, zVal);
-                        // Bottom Vertex (Flat Base at 0)
-                        vertices.push(pX, pY, 0);
+                        vertices.push(vx, vy, vz);
+                        // Bottom Vertex
+                        vertices.push(bx, by, bz);
                     }
                 }
 
@@ -256,65 +426,245 @@ export async function processImage(
                     return ((y * w) + x) * 2 + layer;
                 };
 
-                // Faces (Surface and Bottom)
+                const isValid = (x: number, y: number) => {
+                    if (x < 0 || x >= w || y < 0 || y >= h) return false;
+                    return depthData[y * w + x] !== -1; // -1 means transparent/hole
+                };
+
+                // 1. Generate Surface and Base Faces
                 for (let y = 0; y < h - 1; y++) {
                     for (let x = 0; x < w - 1; x++) {
-                        // Top Surface
+                        // Four corners
+                        const vTL = isValid(x, y);
+                        const vTR = isValid(x + 1, y);
+                        const vBL = isValid(x, y + 1);
+                        const vBR = isValid(x + 1, y + 1);
+
+                        // Indices
                         const tTL = getIdx(x, y, 0);
                         const tTR = getIdx(x + 1, y, 0);
                         const tBL = getIdx(x, y + 1, 0);
                         const tBR = getIdx(x + 1, y + 1, 0);
 
-                        indices.push(tTL, tBL, tTR);
-                        indices.push(tTR, tBL, tBR);
-
-                        // Bottom Surface (Clockwise)
                         const bTL = getIdx(x, y, 1);
                         const bTR = getIdx(x + 1, y, 1);
                         const bBL = getIdx(x, y + 1, 1);
                         const bBR = getIdx(x + 1, y + 1, 1);
 
-                        indices.push(bTL, bTR, bBL);
-                        indices.push(bTR, bBR, bBL);
+                        // We split quad into two triangles: TL-BL-TR and TR-BL-BR
+
+                        // Triangle 1: TL, BL, TR
+                        if (vTL && vBL && vTR) {
+                            // Top Surface
+                            indices.push(tTL, tBL, tTR);
+                            // Bottom Surface (Clockwise / Inverted)
+                            indices.push(bTL, bTR, bBL); // Note: bTR-bBL swap for winding? 
+                            // Original: bTL, bTR, bBL (CCW?)
+                            // Standard Top: (TL, BL, TR) -> CCW.
+                            // Standard Bottom (Looking from UP): Should be CW so it faces down?
+                            // Yes, (TL, TR, BL) would be CW.
+                            // My previous code: push(bTL, bTR, bBL). 
+                            // Let's stick to valid previous winding.
+                            // Prev: push(bTL, bTR, bBL);
+                        }
+
+                        // Triangle 2: TR, BL, BR
+                        if (vTR && vBL && vBR) {
+                            // Top
+                            indices.push(tTR, tBL, tBR);
+                            // Bottom
+                            indices.push(bTR, bBR, bBL); // Previous: (bTR, bBR, bBL)
+                        }
                     }
                 }
 
-                // Stitch Edges to make solid
-                // Top Edge
-                for (let x = 0; x < w - 1; x++) {
-                    const top = getIdx(x, 0, 0);
-                    const topNext = getIdx(x + 1, 0, 0);
-                    const bot = getIdx(x, 0, 1);
-                    const botNext = getIdx(x + 1, 0, 1);
-                    indices.push(top, topNext, bot);
-                    indices.push(bot, topNext, botNext);
+                // 2. Generate Walls (Stitching Valid <-> Invalid transitions)
+                // This covers Outer Borders AND Internal Holes simultaneously.
+
+                // Vertical Walls (checking X neighbors)
+                // We check x from -1 to w-1? No, 0 to w-2 is internal.
+                // Simpler: Check every x from 0 to w-1. Look at x+1.
+                // Also need to handle x=0 (Wall if valid) and x=w-1 (Wall if valid).
+
+                // Let's loop x from 0 to w. 
+                // x=0 means edge between -1 and 0.
+                // x=w means edge between w-1 and w.
+                // For x in 0..w:
+                // Left Pixel = x-1, Right Pixel = x.
+
+                // Horizontal Pass (Vertical Walls)
+                for (let y = 0; y < h - 1; y++) { // y < h-1 because we stitch quads along Y axis
+                    for (let x = 0; x < w; x++) {
+                        // Edge between x-1 and x? No, let's look at pixel columns.
+                        // We are stitching the "Edge" at X.
+                        // Let's iterate pixels x=0 to w-1. Check Right Neighbor.
+
+                        // Wait, validity is per VERTEX.
+                        // A wall is a quad formed by (x,y)-(x,y+1) on one layer connecting to valid/invalid.
+
+                        // Approach: Loop all vertical edges in the grid.
+                        // A vertical edge connects (x,y) to (x,y+1).
+                        // It exists if both (x,y) and (x,y+1) are valid.
+                        // But if we are "inside" the mesh, no wall.
+                        // We need a wall if this vertical edge is on the BOUNDARY.
+
+                        // Boundary condition: (x,y) is Valid, but (x+1, y) is Invalid.
+                        // Then we need a wall at X+?
+                        // Actually, walls are between col x and col x+1.
+
+                    }
                 }
-                // Bottom Edge
-                for (let x = 0; x < w - 1; x++) {
-                    const top = getIdx(x, h - 1, 0);
-                    const topNext = getIdx(x + 1, h - 1, 0);
-                    const bot = getIdx(x, h - 1, 1);
-                    const botNext = getIdx(x + 1, h - 1, 1);
-                    indices.push(top, bot, topNext);
-                    indices.push(bot, botNext, topNext);
-                }
-                // Left Edge
-                for (let y = 0; y < h - 1; y++) {
-                    const top = getIdx(0, y, 0);
-                    const topNext = getIdx(0, y + 1, 0);
-                    const bot = getIdx(0, y, 1);
-                    const botNext = getIdx(0, y + 1, 1);
-                    indices.push(top, bot, topNext);
-                    indices.push(bot, botNext, topNext);
-                }
-                // Right Edge
-                for (let y = 0; y < h - 1; y++) {
-                    const top = getIdx(w - 1, y, 0);
-                    const topNext = getIdx(w - 1, y + 1, 0);
-                    const bot = getIdx(w - 1, y, 1);
-                    const botNext = getIdx(w - 1, y + 1, 1);
-                    indices.push(top, topNext, bot);
-                    indices.push(bot, topNext, botNext);
+
+                // Simpler Wall Logic:
+                // A wall quad connects Top(u,v) -> Top(u',v') -> Bot(u',v') -> Bot(u,v).
+                // It exists if the Segment (u,v)-(u',v') is a boundary.
+                // Segment (x,y)-(x,y+1): Boundary if Left Side (x-1) != Right Side (x)? 
+                // Vertices are at integer coordinates. Pixels are vertices.
+
+                // Let's stick to: "If I am valid, and my neighbor is invalid, build a wall facing neighbor".
+
+                // Loop ALL pixels (x,y).
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        if (!isValid(x, y)) continue;
+
+                        // Check 4 neighbors. If neighbor invalid, build wall.
+                        // We need "Height" for the wall. The wall connects Top(x,y) to Bottom(x,y).
+                        // And it extends along the edge towards the neighbor?
+                        // No. A single vertex doesn't make a wall. An EDGE makes a wall.
+
+                        // We need to iterate EDGES.
+
+                        // 1. Right Edge: (x,y) to (x,y+1).
+                        // Check if this edge is a boundary.
+                        // It is a boundary if (Right Neighbor is Invalid).
+                        // i.e. isValid(x+1, y) is false OR isValid(x+1, y+1) is false?
+                        // Actually, if (x,y) is valid and (x+1,y) is invalid, we have a "horizonal transition" at y.
+                        // But walls are vertical sheets.
+
+                        // Let's go back to the previous simple loops, but made conditional.
+
+                        // Right Edge of cell (x,y): Connects (x,y) to (x,y+1).
+                        // If cell (x) is valid logic is hard with vertices vs faces.
+
+                        // Let's treating "Valid" as "Solid Volume".
+                        // Logic:
+                        // Vertical Boundaries (Walls along Y axis):
+                        // Iterate x from 0 to w-1.
+                        // Iterate y from 0 to h-2 (edges along Y).
+
+                        // Edge E = (x,y) -> (x,y+1).
+                        // If E is valid (both valid):
+                        //   Check Left (x-1): If invalid, generate Left-Facing Wall.
+                        //   Check Right (x+1): If invalid, generate Right-Facing Wall.
+
+                        if (y < h - 1) {
+                            const v1 = isValid(x, y);
+                            const v2 = isValid(x, y + 1);
+                            if (v1 && v2) { // The edge itself exists
+                                // Check Right Side
+                                const r1 = isValid(x + 1, y);
+                                const r2 = isValid(x + 1, y + 1);
+                                if (!r1 || !r2) {
+                                    // If strictly ONE side is invalid, usually valid.
+                                    // If we are at the edge of validity.
+                                    // Let's say: If Right-side polygon is missing?
+                                    // If (x+1) column is effectively empty?
+                                    // Simple check: If (x+1, y) is invalid AND (x+1, y+1) is invalid?
+                                    // What if diagonal? valid(x,y), invalid(x+1,y), valid(x+1,y+1)?
+                                    // Then the edge is partial.
+
+                                    // Robust: Wall exists if (x,y) is valid AND (x+1,y) is invalid.
+                                    // This creates a wall segment between Top(x,y) and Bot(x,y)? No that's a pillar.
+                                    // Wall segment must verify TWO points.
+
+                                    // Let's use the Logic: 
+                                    // For every adjacent pair of vertices along the border, add wall.
+                                    // How to find "adjacent pair along border"?
+
+                                    // Alternative:
+                                    // Iterate all "Potential Quads" (x,y, x+1, y+1).
+                                    // If Quad is mixed (some valid, some invalid), indices.push() faces for the "Cut".
+                                    // This is "Marching Squares" cases 1-15.
+                                    // Correct but tedious (16 cases).
+
+                                    // Let's stick to the "Directional Edge" method which is cleaner.
+                                    // Right Wall: exists if Valid(x,y)&Valid(x,y+1) AND (!Valid(x+1,y) & !Valid(x+1,y+1)).
+                                    // (Simplification: assuming mostly contiguous holes).
+
+                                    const rightInvalid = !isValid(x + 1, y) && !isValid(x + 1, y + 1);
+                                    if (rightInvalid) {
+                                        // Wall facing Right
+                                        // Top(x,y) -> Top(x,y+1) -> Bot(x,y+1) -> Bot(x,y) ??
+                                        // Current Code Right Edge: Top, TopNext, Bot; Bot, TopNext, BotNext.
+                                        // Top=getIdx(x,y), TopNext=getIdx(x,y+1) (along edge)
+                                        const top = getIdx(x, y, 0);       // Top Start
+                                        const topNext = getIdx(x, y + 1, 0); // Top End
+                                        const bot = getIdx(x, y, 1);       // Bot Start
+                                        const botNext = getIdx(x, y + 1, 1); // Bot End
+
+                                        // Winding for Right Face (Facing +X)
+                                        // Top -> TopNext -> Bot (Tri 1)?
+                                        // Normal of (0,1,0) x (0,0,-1) = (-1, 0, 0) - wait.
+                                        // Let's copy "Right Edge" winding from original code.
+                                        // indices.push(top, topNext, bot);
+                                        // indices.push(bot, topNext, botNext);
+                                        indices.push(top, topNext, bot);
+                                        indices.push(bot, topNext, botNext);
+                                    }
+
+                                    // Left Wall (Check x-1)
+                                    const leftInvalid = !isValid(x - 1, y) && !isValid(x - 1, y + 1);
+                                    if (leftInvalid) {
+                                        // Wall facing Left
+                                        const top = getIdx(x, y, 0);
+                                        const topNext = getIdx(x, y + 1, 0);
+                                        const bot = getIdx(x, y, 1);
+                                        const botNext = getIdx(x, y + 1, 1);
+
+                                        // Invert winding of Right Wall
+                                        indices.push(top, bot, topNext);
+                                        indices.push(bot, botNext, topNext);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Horizontal Edges (Walls along X axis)
+                        if (x < w - 1) {
+                            const v1 = isValid(x, y);
+                            const v2 = isValid(x + 1, y);
+                            if (v1 && v2) {
+                                // Check Bottom (y+1) -> Facing Down (+Y)
+                                const botInvalid = !isValid(x, y + 1) && !isValid(x + 1, y + 1);
+                                if (botInvalid) {
+                                    const top = getIdx(x, y, 0);
+                                    const topNext = getIdx(x + 1, y, 0);
+                                    const bot = getIdx(x, y, 1);
+                                    const botNext = getIdx(x + 1, y, 1);
+
+                                    // Bottom Edge winding (from original code)
+                                    // indices.push(top, bot, topNext);
+                                    // indices.push(bot, botNext, topNext);
+                                    indices.push(top, bot, topNext);
+                                    indices.push(bot, botNext, topNext);
+                                }
+
+                                // Check Top (y-1) -> Facing Up (-Y)
+                                const topInvalid = !isValid(x, y - 1) && !isValid(x + 1, y - 1);
+                                if (topInvalid) {
+                                    const top = getIdx(x, y, 0);
+                                    const topNext = getIdx(x + 1, y, 0);
+                                    const bot = getIdx(x, y, 1);
+                                    const botNext = getIdx(x + 1, y, 1);
+
+                                    // Invert winding
+                                    indices.push(top, topNext, bot);
+                                    indices.push(bot, topNext, botNext);
+                                }
+                            }
+                        }
+                    }
                 }
 
                 geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
@@ -331,6 +681,7 @@ export async function processImage(
                 resolve({
                     previewUrl,
                     stlBlob: blob,
+                    geometry: geom, // Return the geometry
                     width: targetWidth,
                     height: targetHeight
                 });
@@ -341,6 +692,43 @@ export async function processImage(
         };
         img.src = imageUrl;
     });
+}
+
+function applyImageAdjustments(data: Uint8ClampedArray, options: ProcessingOptions) {
+    const { contrast = 1.0, brightness = 1.0, gamma = 1.0 } = options;
+
+    // Create lookup tables for speed if needed, but per-pixel is fine for this size
+    for (let i = 0; i < data.length; i += 4) {
+        // Normalize 0-1
+        let r = data[i] / 255;
+        let g = data[i + 1] / 255;
+        let b = data[i + 2] / 255;
+
+        // Apply Brightness
+        r *= brightness;
+        g *= brightness;
+        b *= brightness;
+
+        // Apply Contrast
+        // factor = (259 * (contrast + 255)) / (255 * (259 - contrast)) ? No, simple usually works:
+        // centered at 0.5: color = (color - 0.5) * contrast + 0.5
+        r = (r - 0.5) * contrast + 0.5;
+        g = (g - 0.5) * contrast + 0.5;
+        b = (b - 0.5) * contrast + 0.5;
+
+        // Apply Gamma
+        // val = val ^ (1/gamma)
+        if (gamma !== 1.0 && gamma > 0) {
+            r = Math.pow(Math.max(0, r), 1 / gamma);
+            g = Math.pow(Math.max(0, g), 1 / gamma);
+            b = Math.pow(Math.max(0, b), 1 / gamma);
+        }
+
+        // Clamp
+        data[i] = Math.min(255, Math.max(0, r * 255));
+        data[i + 1] = Math.min(255, Math.max(0, g * 255));
+        data[i + 2] = Math.min(255, Math.max(0, b * 255));
+    }
 }
 
 function applyBlur(src: Uint8ClampedArray, w: number, h: number, radius: number): Uint8ClampedArray {

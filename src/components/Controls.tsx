@@ -96,6 +96,98 @@ export function Controls({ options, onChange, className }: ControlsProps) {
             <div className="space-y-4">
                 <div className="flex items-center justify-between">
                     <label className="text-sm font-medium flex items-center gap-2 text-white/90">
+                        <span className="text-primary">☀</span>
+                        Image Adjustments
+                    </label>
+                </div>
+
+                {/* Contrast */}
+                <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-white/50">
+                        <span>Contrast</span>
+                        <span>{options.contrast?.toFixed(1) || '1.0'}</span>
+                    </div>
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.1"
+                        value={options.contrast || 1.0}
+                        onChange={(e) => updateOption('contrast', parseFloat(e.target.value))}
+                        className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                    />
+                </div>
+
+                {/* Brightness */}
+                <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-white/50">
+                        <span>Brightness</span>
+                        <span>{options.brightness?.toFixed(1) || '1.0'}</span>
+                    </div>
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="2.0"
+                        step="0.1"
+                        value={options.brightness || 1.0}
+                        onChange={(e) => updateOption('brightness', parseFloat(e.target.value))}
+                        className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                    />
+                </div>
+
+                {/* Gamma */}
+                <div className="space-y-1">
+                    <div className="flex justify-between text-xs text-white/50">
+                        <span>Gamma</span>
+                        <span>{options.gamma?.toFixed(1) || '1.0'}</span>
+                    </div>
+                    <input
+                        type="range"
+                        min="0.5"
+                        max="2.5"
+                        step="0.1"
+                        value={options.gamma || 1.0}
+                        onChange={(e) => updateOption('gamma', parseFloat(e.target.value))}
+                        className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                    />
+                </div>
+
+                {/* Background Removal */}
+                <div className="pt-2 border-t border-white/5">
+                    <label className="flex items-center gap-2 cursor-pointer mb-2">
+                        <input
+                            type="checkbox"
+                            checked={options.backgroundRemoval || false}
+                            onChange={(e) => updateOption('backgroundRemoval', e.target.checked)}
+                            className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-primary transition-colors cursor-pointer"
+                        />
+                        <span className="text-xs text-white/80">Remove Background (White)</span>
+                    </label>
+
+                    {options.backgroundRemoval && (
+                        <div className="space-y-1 animate-in fade-in slide-in-from-top-1">
+                            <div className="flex justify-between text-xs text-white/50">
+                                <span>Threshold</span>
+                                <span>{options.backgroundThreshold || 250}</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="100"
+                                max="255"
+                                step="1"
+                                value={options.backgroundThreshold || 250}
+                                onChange={(e) => updateOption('backgroundThreshold', parseInt(e.target.value))}
+                                className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                    )}
+                </div>
+
+            </div>
+
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium flex items-center gap-2 text-white/90">
                         <span className="text-primary">~</span>
                         Smoothing
                     </label>
@@ -213,6 +305,101 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                 />
             </div>
 
+            {/* Shape Selection */}
+            <div className="space-y-4 pt-4 border-t border-white/10">
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium flex items-center gap-2 text-white/90">
+                        <span className="text-primary">↺</span>
+                        Shape
+                    </label>
+                    <select
+                        value={options.shape?.type || 'flat'}
+                        onChange={(e) => updateOption('shape' as any, { ...options.shape, type: e.target.value as any })}
+                        className="bg-white/5 hover:bg-white/10 transition-colors border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-primary/50 cursor-pointer [&>option]:bg-zinc-900 [&>option]:text-white"
+                    >
+                        <option value="flat">Flat</option>
+                        <option value="arc">Curved Arc</option>
+                        <option value="cylinder">Cylinder / Lamp</option>
+                        <option value="sphere">Sphere / Moon</option>
+                    </select>
+                </div>
+
+                {options.shape?.type === 'arc' && (
+                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                        <div className="flex justify-between">
+                            <span className="text-xs text-white/50">Arc Angle (Degrees)</span>
+                            <span className="text-xs font-mono text-primary">{options.shape.angle}°</span>
+                        </div>
+                        <input
+                            type="range"
+                            min="45"
+                            max="360"
+                            step="5"
+                            value={options.shape.angle || 180}
+                            onChange={(e) => updateOption('shape' as any, { ...options.shape, angle: parseInt(e.target.value) })}
+                            className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <p className="text-xs text-white/40">
+                            180° = Half Circle. 360° = Full Circle (Cylinder).
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* Mounting Hole */}
+            <div className="space-y-4 pt-4 border-t border-white/10">
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium flex items-center gap-2 text-white/90">
+                        <span className="text-primary">◎</span>
+                        Mounting
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={options.mounting?.enabled || false}
+                            onChange={(e) => updateOption('mounting' as any, { ...(options.mounting || { diameterMm: 5, offsetMm: 5 }), enabled: e.target.checked })}
+                            className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-primary transition-colors cursor-pointer"
+                        />
+                        <span className="text-xs text-white/80">Enable Hole</span>
+                    </label>
+                </div>
+
+                {options.mounting?.enabled && (
+                    <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-xs text-white/50">Diameter (mm)</span>
+                                <span className="text-xs font-mono text-primary">{options.mounting.diameterMm}mm</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="2"
+                                max="20"
+                                step="1"
+                                value={options.mounting.diameterMm}
+                                onChange={(e) => updateOption('mounting' as any, { ...options.mounting, diameterMm: parseFloat(e.target.value) })}
+                                className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between">
+                                <span className="text-xs text-white/50">Top Offset (mm)</span>
+                                <span className="text-xs font-mono text-primary">{options.mounting.offsetMm}mm</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="2"
+                                max="50"
+                                step="1"
+                                value={options.mounting.offsetMm}
+                                onChange={(e) => updateOption('mounting' as any, { ...options.mounting, offsetMm: parseFloat(e.target.value) })}
+                                className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
+                            />
+                        </div>
+                    </div>
+                )}
+            </div>
+
             <label className="flex items-center gap-3 cursor-pointer group">
                 <input
                     type="checkbox"
@@ -233,12 +420,14 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                     <select
                         value={options.border?.type || 'none'}
                         onChange={(e) => updateOption('border' as any, { ...options.border, type: e.target.value as any })}
-                        className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-primary/50"
+                        className="bg-white/5 hover:bg-white/10 transition-colors border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-primary/50 cursor-pointer [&>option]:bg-zinc-900 [&>option]:text-white"
                     >
                         <option value="none">None</option>
                         <option value="flat">Flat</option>
                         <option value="rounded">Rounded</option>
                         <option value="chamfer">Chamfer</option>
+                        <option value="frame">Classic Frame</option>
+                        <option value="oval">Oval & Frame</option>
                     </select>
                 </div>
 
