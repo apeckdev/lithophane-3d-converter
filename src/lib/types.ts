@@ -1,4 +1,4 @@
-export type BorderType = 'none' | 'flat' | 'rounded' | 'chamfer';
+export type BorderType = 'none' | 'flat' | 'rounded' | 'chamfer' | 'oval' | 'frame';
 
 export interface BorderSettings {
     type: BorderType;

@@ -431,6 +431,24 @@ export async function processImage(
                     return depthData[y * w + x] !== -1; // -1 means transparent/hole
                 };
 
+                // Helper for topological edge tracking (to detect boundaries)
+                const boundaryEdges = new Map<string, number>();
+                const addEdge = (u: number, v: number) => {
+                    // We only track edges for the TOP surface.
+                    // If an edge u->v is shared by two triangles (e.g. u->v and v->u),
+                    // it is internal.
+                    const key = `${u}_${v}`;
+                    const revKey = `${v}_${u}`;
+
+                    if (boundaryEdges.has(revKey)) {
+                        // Found the mate, so this is an internal edge -> remove it
+                        boundaryEdges.delete(revKey);
+                    } else {
+                        // New candidate for boundary
+                        boundaryEdges.set(key, 1);
+                    }
+                };
+
                 // 1. Generate Surface and Base Faces
                 for (let y = 0; y < h - 1; y++) {
                     for (let x = 0; x < w - 1; x++) {
@@ -451,220 +469,56 @@ export async function processImage(
                         const bBL = getIdx(x, y + 1, 1);
                         const bBR = getIdx(x + 1, y + 1, 1);
 
-                        // We split quad into two triangles: TL-BL-TR and TR-BL-BR
-
                         // Triangle 1: TL, BL, TR
                         if (vTL && vBL && vTR) {
                             // Top Surface
                             indices.push(tTL, tBL, tTR);
+                            addEdge(tTL, tBL);
+                            addEdge(tBL, tTR);
+                            addEdge(tTR, tTL);
+
                             // Bottom Surface (Clockwise / Inverted)
-                            indices.push(bTL, bTR, bBL); // Note: bTR-bBL swap for winding? 
-                            // Original: bTL, bTR, bBL (CCW?)
-                            // Standard Top: (TL, BL, TR) -> CCW.
-                            // Standard Bottom (Looking from UP): Should be CW so it faces down?
-                            // Yes, (TL, TR, BL) would be CW.
-                            // My previous code: push(bTL, bTR, bBL). 
-                            // Let's stick to valid previous winding.
-                            // Prev: push(bTL, bTR, bBL);
+                            indices.push(bTL, bTR, bBL);
                         }
 
                         // Triangle 2: TR, BL, BR
                         if (vTR && vBL && vBR) {
                             // Top
                             indices.push(tTR, tBL, tBR);
+                            addEdge(tTR, tBL);
+                            addEdge(tBL, tBR);
+                            addEdge(tBR, tTR);
+
                             // Bottom
-                            indices.push(bTR, bBR, bBL); // Previous: (bTR, bBR, bBL)
+                            indices.push(bTR, bBR, bBL);
                         }
                     }
                 }
 
-                // 2. Generate Walls (Stitching Valid <-> Invalid transitions)
-                // This covers Outer Borders AND Internal Holes simultaneously.
+                // 2. Generate Walls from Boundary Edges
+                // Any edge remaining in the map is a boundary edge on the Top Surface.
+                // We must drop a wall from this edge down to the Bottom Surface.
+                for (const key of boundaryEdges.keys()) {
+                    const [uStr, vStr] = key.split('_');
+                    const u = parseInt(uStr, 10);
+                    const v = parseInt(vStr, 10);
 
-                // Vertical Walls (checking X neighbors)
-                // We check x from -1 to w-1? No, 0 to w-2 is internal.
-                // Simpler: Check every x from 0 to w-1. Look at x+1.
-                // Also need to handle x=0 (Wall if valid) and x=w-1 (Wall if valid).
+                    // Top indices are u, v.
+                    // Bottom indices are u+1, v+1 (since we pushed Top then Bottom for each pixel).
+                    // Verify: getIdx(x,y,0) is even. getIdx(x,y,1) is getIdx(x,y,0)+1.
+                    const uBot = u + 1;
+                    const vBot = v + 1;
 
-                // Let's loop x from 0 to w. 
-                // x=0 means edge between -1 and 0.
-                // x=w means edge between w-1 and w.
-                // For x in 0..w:
-                // Left Pixel = x-1, Right Pixel = x.
+                    // Wall Quad: Top Edge (u->v) connects to Bottom Edge (vBot->uBot).
+                    // We need to maintain winding order (CCW outside).
+                    // Top Surface edge u->v represents the boundary, with "valid" to the left.
+                    // So the wall should face "out" (to the right of u->v).
+                    // Quad sequence: u, v, vBot, uBot.
 
-                // Horizontal Pass (Vertical Walls)
-                for (let y = 0; y < h - 1; y++) { // y < h-1 because we stitch quads along Y axis
-                    for (let x = 0; x < w; x++) {
-                        // Edge between x-1 and x? No, let's look at pixel columns.
-                        // We are stitching the "Edge" at X.
-                        // Let's iterate pixels x=0 to w-1. Check Right Neighbor.
-
-                        // Wait, validity is per VERTEX.
-                        // A wall is a quad formed by (x,y)-(x,y+1) on one layer connecting to valid/invalid.
-
-                        // Approach: Loop all vertical edges in the grid.
-                        // A vertical edge connects (x,y) to (x,y+1).
-                        // It exists if both (x,y) and (x,y+1) are valid.
-                        // But if we are "inside" the mesh, no wall.
-                        // We need a wall if this vertical edge is on the BOUNDARY.
-
-                        // Boundary condition: (x,y) is Valid, but (x+1, y) is Invalid.
-                        // Then we need a wall at X+?
-                        // Actually, walls are between col x and col x+1.
-
-                    }
-                }
-
-                // Simpler Wall Logic:
-                // A wall quad connects Top(u,v) -> Top(u',v') -> Bot(u',v') -> Bot(u,v).
-                // It exists if the Segment (u,v)-(u',v') is a boundary.
-                // Segment (x,y)-(x,y+1): Boundary if Left Side (x-1) != Right Side (x)? 
-                // Vertices are at integer coordinates. Pixels are vertices.
-
-                // Let's stick to: "If I am valid, and my neighbor is invalid, build a wall facing neighbor".
-
-                // Loop ALL pixels (x,y).
-                for (let y = 0; y < h; y++) {
-                    for (let x = 0; x < w; x++) {
-                        if (!isValid(x, y)) continue;
-
-                        // Check 4 neighbors. If neighbor invalid, build wall.
-                        // We need "Height" for the wall. The wall connects Top(x,y) to Bottom(x,y).
-                        // And it extends along the edge towards the neighbor?
-                        // No. A single vertex doesn't make a wall. An EDGE makes a wall.
-
-                        // We need to iterate EDGES.
-
-                        // 1. Right Edge: (x,y) to (x,y+1).
-                        // Check if this edge is a boundary.
-                        // It is a boundary if (Right Neighbor is Invalid).
-                        // i.e. isValid(x+1, y) is false OR isValid(x+1, y+1) is false?
-                        // Actually, if (x,y) is valid and (x+1,y) is invalid, we have a "horizonal transition" at y.
-                        // But walls are vertical sheets.
-
-                        // Let's go back to the previous simple loops, but made conditional.
-
-                        // Right Edge of cell (x,y): Connects (x,y) to (x,y+1).
-                        // If cell (x) is valid logic is hard with vertices vs faces.
-
-                        // Let's treating "Valid" as "Solid Volume".
-                        // Logic:
-                        // Vertical Boundaries (Walls along Y axis):
-                        // Iterate x from 0 to w-1.
-                        // Iterate y from 0 to h-2 (edges along Y).
-
-                        // Edge E = (x,y) -> (x,y+1).
-                        // If E is valid (both valid):
-                        //   Check Left (x-1): If invalid, generate Left-Facing Wall.
-                        //   Check Right (x+1): If invalid, generate Right-Facing Wall.
-
-                        if (y < h - 1) {
-                            const v1 = isValid(x, y);
-                            const v2 = isValid(x, y + 1);
-                            if (v1 && v2) { // The edge itself exists
-                                // Check Right Side
-                                const r1 = isValid(x + 1, y);
-                                const r2 = isValid(x + 1, y + 1);
-                                if (!r1 || !r2) {
-                                    // If strictly ONE side is invalid, usually valid.
-                                    // If we are at the edge of validity.
-                                    // Let's say: If Right-side polygon is missing?
-                                    // If (x+1) column is effectively empty?
-                                    // Simple check: If (x+1, y) is invalid AND (x+1, y+1) is invalid?
-                                    // What if diagonal? valid(x,y), invalid(x+1,y), valid(x+1,y+1)?
-                                    // Then the edge is partial.
-
-                                    // Robust: Wall exists if (x,y) is valid AND (x+1,y) is invalid.
-                                    // This creates a wall segment between Top(x,y) and Bot(x,y)? No that's a pillar.
-                                    // Wall segment must verify TWO points.
-
-                                    // Let's use the Logic: 
-                                    // For every adjacent pair of vertices along the border, add wall.
-                                    // How to find "adjacent pair along border"?
-
-                                    // Alternative:
-                                    // Iterate all "Potential Quads" (x,y, x+1, y+1).
-                                    // If Quad is mixed (some valid, some invalid), indices.push() faces for the "Cut".
-                                    // This is "Marching Squares" cases 1-15.
-                                    // Correct but tedious (16 cases).
-
-                                    // Let's stick to the "Directional Edge" method which is cleaner.
-                                    // Right Wall: exists if Valid(x,y)&Valid(x,y+1) AND (!Valid(x+1,y) & !Valid(x+1,y+1)).
-                                    // (Simplification: assuming mostly contiguous holes).
-
-                                    const rightInvalid = !isValid(x + 1, y) && !isValid(x + 1, y + 1);
-                                    if (rightInvalid) {
-                                        // Wall facing Right
-                                        // Top(x,y) -> Top(x,y+1) -> Bot(x,y+1) -> Bot(x,y) ??
-                                        // Current Code Right Edge: Top, TopNext, Bot; Bot, TopNext, BotNext.
-                                        // Top=getIdx(x,y), TopNext=getIdx(x,y+1) (along edge)
-                                        const top = getIdx(x, y, 0);       // Top Start
-                                        const topNext = getIdx(x, y + 1, 0); // Top End
-                                        const bot = getIdx(x, y, 1);       // Bot Start
-                                        const botNext = getIdx(x, y + 1, 1); // Bot End
-
-                                        // Winding for Right Face (Facing +X)
-                                        // Top -> TopNext -> Bot (Tri 1)?
-                                        // Normal of (0,1,0) x (0,0,-1) = (-1, 0, 0) - wait.
-                                        // Let's copy "Right Edge" winding from original code.
-                                        // indices.push(top, topNext, bot);
-                                        // indices.push(bot, topNext, botNext);
-                                        indices.push(top, topNext, bot);
-                                        indices.push(bot, topNext, botNext);
-                                    }
-
-                                    // Left Wall (Check x-1)
-                                    const leftInvalid = !isValid(x - 1, y) && !isValid(x - 1, y + 1);
-                                    if (leftInvalid) {
-                                        // Wall facing Left
-                                        const top = getIdx(x, y, 0);
-                                        const topNext = getIdx(x, y + 1, 0);
-                                        const bot = getIdx(x, y, 1);
-                                        const botNext = getIdx(x, y + 1, 1);
-
-                                        // Invert winding of Right Wall
-                                        indices.push(top, bot, topNext);
-                                        indices.push(bot, botNext, topNext);
-                                    }
-                                }
-                            }
-                        }
-
-                        // Horizontal Edges (Walls along X axis)
-                        if (x < w - 1) {
-                            const v1 = isValid(x, y);
-                            const v2 = isValid(x + 1, y);
-                            if (v1 && v2) {
-                                // Check Bottom (y+1) -> Facing Down (+Y)
-                                const botInvalid = !isValid(x, y + 1) && !isValid(x + 1, y + 1);
-                                if (botInvalid) {
-                                    const top = getIdx(x, y, 0);
-                                    const topNext = getIdx(x + 1, y, 0);
-                                    const bot = getIdx(x, y, 1);
-                                    const botNext = getIdx(x + 1, y, 1);
-
-                                    // Bottom Edge winding (from original code)
-                                    // indices.push(top, bot, topNext);
-                                    // indices.push(bot, botNext, topNext);
-                                    indices.push(top, bot, topNext);
-                                    indices.push(bot, botNext, topNext);
-                                }
-
-                                // Check Top (y-1) -> Facing Up (-Y)
-                                const topInvalid = !isValid(x, y - 1) && !isValid(x + 1, y - 1);
-                                if (topInvalid) {
-                                    const top = getIdx(x, y, 0);
-                                    const topNext = getIdx(x + 1, y, 0);
-                                    const bot = getIdx(x, y, 1);
-                                    const botNext = getIdx(x + 1, y, 1);
-
-                                    // Invert winding
-                                    indices.push(top, topNext, bot);
-                                    indices.push(bot, topNext, botNext);
-                                }
-                            }
-                        }
-                    }
+                    // Triangle 1: u, v, vBot
+                    indices.push(u, v, vBot);
+                    // Triangle 2: u, vBot, uBot
+                    indices.push(u, vBot, uBot);
                 }
 
                 geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));

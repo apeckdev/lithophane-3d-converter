@@ -50,7 +50,7 @@ function App() {
       try {
         const parsed = JSON.parse(saved);
         // Merge with defaults to ensure new fields (like mounting) are present
-        setOptions(prev => ({ ...DEFAULT_OPTIONS, ...parsed }));
+        setOptions(() => ({ ...DEFAULT_OPTIONS, ...parsed }));
       } catch (e) {
         console.warn("Failed to load options", e);
       }
