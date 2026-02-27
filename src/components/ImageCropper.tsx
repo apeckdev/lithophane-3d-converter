@@ -88,10 +88,10 @@ export function ImageCropper({ imageUrl, onCropComplete, onCancel }: ImageCroppe
                 <div className="flex items-center justify-between">
                     <h3 className="text-lg font-semibold">Crop Image</h3>
                     <div className="flex gap-2">
-                        <button onClick={onCancel} className="p-2 hover:bg-white/10 rounded-lg text-white/50 hover:text-white transition-colors">
+                        <button onClick={onCancel} title="Cancel Crop" className="p-2 hover:bg-white/10 rounded-lg text-white/50 hover:text-white transition-colors">
                             <X className="w-5 h-5" />
                         </button>
-                        <button onClick={getCroppedImg} className="px-4 py-2 bg-primary text-background font-semibold rounded-lg hover:bg-white transition-colors flex items-center gap-2">
+                        <button onClick={getCroppedImg} title="Apply Crop" className="px-4 py-2 bg-primary text-background font-semibold rounded-lg hover:bg-white transition-colors flex items-center gap-2">
                             <Check className="w-4 h-4" />
                             Apply Crop
                         </button>

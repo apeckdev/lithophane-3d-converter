@@ -34,6 +34,7 @@ export function ImageUpload({ onImageSelect, className }: ImageUploadProps) {
         >
             <input
                 type="file"
+                title="Upload Image"
                 accept="image/*"
                 onChange={handleChange}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"

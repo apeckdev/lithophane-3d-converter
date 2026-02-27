@@ -229,6 +229,7 @@ function App() {
                     ) : (
                       <button
                         onClick={handleDownload}
+                        title="Download STL"
                         disabled={!result}
                         className="w-full py-3 bg-primary text-background font-semibold rounded-lg hover:bg-white transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/20"
                       >
@@ -279,12 +280,14 @@ function App() {
                 <div className="flex bg-black/60 backdrop-blur rounded border border-white/5 p-0.5">
                   <button
                     onClick={() => setViewMode('2d')}
+                    title="2D Preview"
                     className={`px-3 py-0.5 text-xs rounded transition-colors ${viewMode === '2d' ? 'bg-primary text-background font-medium' : 'text-white/50 hover:text-white'}`}
                   >
                     2D
                   </button>
                   <button
                     onClick={() => setViewMode('3d')}
+                    title="3D Preview"
                     className={`px-3 py-0.5 text-xs rounded transition-colors ${viewMode === '3d' ? 'bg-primary text-background font-medium' : 'text-white/50 hover:text-white'}`}
                   >
                     3D

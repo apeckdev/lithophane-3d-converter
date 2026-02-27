@@ -1,5 +1,5 @@
 import { Ruler, Layers, MoveVertical } from 'lucide-react';
-import type { ProcessingOptions } from '../lib/types';
+import type { ProcessingOptions, ShapeType, BorderType } from '../lib/types';
 import { twMerge } from 'tailwind-merge';
 import { useEffect } from 'react';
 
@@ -329,7 +329,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                         title="Shape"
                         aria-label="Shape"
                         value={options.shape?.type || 'flat'}
-                        onChange={(e) => updateOption('shape' as any, { ...options.shape, type: e.target.value as any })}
+                        onChange={(e) => updateOption('shape', { ...options.shape, type: e.target.value as ShapeType })}
                         className="bg-white/5 hover:bg-white/10 transition-colors border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-primary/50 cursor-pointer [&>option]:bg-zinc-900 [&>option]:text-white"
                     >
                         <option value="flat">Flat</option>
@@ -353,7 +353,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                             max="360"
                             step="5"
                             value={options.shape.angle || 180}
-                            onChange={(e) => updateOption('shape' as any, { ...options.shape, angle: parseInt(e.target.value) })}
+                            onChange={(e) => updateOption('shape', { ...options.shape, angle: parseInt(e.target.value) })}
                             className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                         />
                         <p className="text-xs text-white/40">
@@ -375,7 +375,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                             type="checkbox"
                             title="Enable Hole"
                             checked={options.mounting?.enabled || false}
-                            onChange={(e) => updateOption('mounting' as any, { ...(options.mounting || { diameterMm: 5, offsetMm: 5 }), enabled: e.target.checked })}
+                            onChange={(e) => updateOption('mounting', { ...(options.mounting || { diameterMm: 5, offsetMm: 5 }), enabled: e.target.checked })}
                             className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-primary transition-colors cursor-pointer"
                         />
                         <span className="text-xs text-white/80">Enable Hole</span>
@@ -396,7 +396,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                                 max="20"
                                 step="1"
                                 value={options.mounting.diameterMm}
-                                onChange={(e) => updateOption('mounting' as any, { ...options.mounting, diameterMm: parseFloat(e.target.value) })}
+                                onChange={(e) => updateOption('mounting', { ...options.mounting!, diameterMm: parseFloat(e.target.value) })}
                                 className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
@@ -412,7 +412,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                                 max="50"
                                 step="1"
                                 value={options.mounting.offsetMm}
-                                onChange={(e) => updateOption('mounting' as any, { ...options.mounting, offsetMm: parseFloat(e.target.value) })}
+                                onChange={(e) => updateOption('mounting', { ...options.mounting!, offsetMm: parseFloat(e.target.value) })}
                                 className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
@@ -443,7 +443,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                         title="Border"
                         aria-label="Border"
                         value={options.border?.type || 'none'}
-                        onChange={(e) => updateOption('border' as any, { ...options.border, type: e.target.value as any })}
+                        onChange={(e) => updateOption('border', { ...options.border, type: e.target.value as BorderType })}
                         className="bg-white/5 hover:bg-white/10 transition-colors border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-primary/50 cursor-pointer [&>option]:bg-zinc-900 [&>option]:text-white"
                     >
                         <option value="none">None</option>
@@ -469,7 +469,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                                 max="20"
                                 step="1"
                                 value={options.border.widthMm}
-                                onChange={(e) => updateOption('border' as any, { ...options.border, widthMm: parseFloat(e.target.value) })}
+                                onChange={(e) => updateOption('border', { ...options.border!, widthMm: parseFloat(e.target.value) })}
                                 className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>
@@ -485,7 +485,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                                 max="10"
                                 step="0.2"
                                 value={options.border.depthMm}
-                                onChange={(e) => updateOption('border' as any, { ...options.border, depthMm: parseFloat(e.target.value) })}
+                                onChange={(e) => updateOption('border', { ...options.border!, depthMm: parseFloat(e.target.value) })}
                                 className="w-full accent-primary h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer"
                             />
                         </div>

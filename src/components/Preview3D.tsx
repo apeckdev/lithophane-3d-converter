@@ -64,6 +64,7 @@ export function Preview3D({ geometry, imageUrl }: Preview3DProps) {
             <div className="absolute top-4 right-4 z-10 flex flex-col gap-2 p-2 bg-black/60 backdrop-blur rounded-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                     onClick={() => setIsBacklit(!isBacklit)}
+                    title={isBacklit ? 'Turn Backlight OFF' : 'Turn Backlight ON'}
                     className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${isBacklit ? 'bg-primary text-background' : 'bg-white/10 hover:bg-white/20 text-white'
                         }`}
                 >
@@ -71,6 +72,7 @@ export function Preview3D({ geometry, imageUrl }: Preview3DProps) {
                 </button>
                 <button
                     onClick={() => setAutoRotate(!autoRotate)}
+                    title={autoRotate ? 'Turn Rotate OFF' : 'Turn Rotate ON'}
                     className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${autoRotate ? 'bg-primary text-background' : 'bg-white/10 hover:bg-white/20 text-white'
                         }`}
                 >
