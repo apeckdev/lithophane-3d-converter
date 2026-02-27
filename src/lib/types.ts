@@ -12,7 +12,7 @@ export interface MountingSettings {
     offsetMm: number; // Distance from top edge
 }
 
-export type ShapeType = 'flat' | 'cylinder' | 'arc' | 'sphere';
+export type ShapeType = 'flat' | 'cylinder' | 'arc' | 'sphere' | 'circle';
 
 export interface ShapeSettings {
     type: ShapeType;

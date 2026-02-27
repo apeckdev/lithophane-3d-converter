@@ -62,6 +62,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                 </div>
                 <input
                     type="range"
+                    title="Layer Count"
                     min="2"
                     max="20"
                     step="1"
@@ -109,6 +110,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                     </div>
                     <input
                         type="range"
+                        title="Contrast"
                         min="0.5"
                         max="2.0"
                         step="0.1"
@@ -126,6 +128,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                     </div>
                     <input
                         type="range"
+                        title="Brightness"
                         min="0.5"
                         max="2.0"
                         step="0.1"
@@ -143,6 +146,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                     </div>
                     <input
                         type="range"
+                        title="Gamma"
                         min="0.5"
                         max="2.5"
                         step="0.1"
@@ -157,6 +161,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                     <label className="flex items-center gap-2 cursor-pointer mb-2">
                         <input
                             type="checkbox"
+                            title="Remove Background"
                             checked={options.backgroundRemoval || false}
                             onChange={(e) => updateOption('backgroundRemoval', e.target.checked)}
                             className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-primary transition-colors cursor-pointer"
@@ -172,6 +177,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                             </div>
                             <input
                                 type="range"
+                                title="Threshold"
                                 min="100"
                                 max="255"
                                 step="1"
@@ -197,6 +203,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                 </div>
                 <input
                     type="range"
+                    title="Smoothing"
                     min="0"
                     max="1"
                     step="0.1"
@@ -219,6 +226,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                 </div>
                 <input
                     type="range"
+                    title="Base Thickness"
                     min="0"
                     max="5"
                     step="0.2"
@@ -239,6 +247,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                         <span className="text-xs text-white/50">Min Height</span>
                         <input
                             type="number"
+                            title="Min Height"
                             min="0.2"
                             max="5"
                             step="0.1"
@@ -251,6 +260,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                         <span className="text-xs text-white/50">Max Height</span>
                         <input
                             type="number"
+                            title="Max Height"
                             min="0.2"
                             max="10"
                             step="0.1"
@@ -274,6 +284,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                 </div>
                 <input
                     type="range"
+                    title="Resolution"
                     min="0.1"
                     max="0.4"
                     step="0.05"
@@ -296,6 +307,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                 </div>
                 <input
                     type="range"
+                    title="Print Width"
                     min="20"
                     max="300"
                     step="5"
@@ -308,11 +320,14 @@ export function Controls({ options, onChange, className }: ControlsProps) {
             {/* Shape Selection */}
             <div className="space-y-4 pt-4 border-t border-white/10">
                 <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium flex items-center gap-2 text-white/90">
+                    <label htmlFor="shape-select" className="text-sm font-medium flex items-center gap-2 text-white/90">
                         <span className="text-primary">↺</span>
                         Shape
                     </label>
                     <select
+                        id="shape-select"
+                        title="Shape"
+                        aria-label="Shape"
                         value={options.shape?.type || 'flat'}
                         onChange={(e) => updateOption('shape' as any, { ...options.shape, type: e.target.value as any })}
                         className="bg-white/5 hover:bg-white/10 transition-colors border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-primary/50 cursor-pointer [&>option]:bg-zinc-900 [&>option]:text-white"
@@ -321,6 +336,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                         <option value="arc">Curved Arc</option>
                         <option value="cylinder">Cylinder / Lamp</option>
                         <option value="sphere">Sphere / Moon</option>
+                        <option value="circle">Circle / Coin</option>
                     </select>
                 </div>
 
@@ -332,6 +348,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                         </div>
                         <input
                             type="range"
+                            title="Arc Angle"
                             min="45"
                             max="360"
                             step="5"
@@ -356,6 +373,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                     <label className="flex items-center gap-2 cursor-pointer">
                         <input
                             type="checkbox"
+                            title="Enable Hole"
                             checked={options.mounting?.enabled || false}
                             onChange={(e) => updateOption('mounting' as any, { ...(options.mounting || { diameterMm: 5, offsetMm: 5 }), enabled: e.target.checked })}
                             className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-primary transition-colors cursor-pointer"
@@ -373,6 +391,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                             </div>
                             <input
                                 type="range"
+                                title="Diameter"
                                 min="2"
                                 max="20"
                                 step="1"
@@ -388,6 +407,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                             </div>
                             <input
                                 type="range"
+                                title="Top Offset"
                                 min="2"
                                 max="50"
                                 step="1"
@@ -403,6 +423,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
             <label className="flex items-center gap-3 cursor-pointer group">
                 <input
                     type="checkbox"
+                    title="Invert Heights"
                     checked={options.invert}
                     onChange={(e) => updateOption('invert', e.target.checked)}
                     className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-primary transition-colors cursor-pointer"
@@ -413,11 +434,14 @@ export function Controls({ options, onChange, className }: ControlsProps) {
             {/* Border Settings */}
             <div className="pt-4 border-t border-white/10 space-y-4">
                 <div className="flex items-center justify-between">
-                    <label className="text-sm font-medium flex items-center gap-2 text-white/90">
+                    <label htmlFor="border-select" className="text-sm font-medium flex items-center gap-2 text-white/90">
                         <span className="text-primary">▢</span>
                         Border
                     </label>
                     <select
+                        id="border-select"
+                        title="Border"
+                        aria-label="Border"
                         value={options.border?.type || 'none'}
                         onChange={(e) => updateOption('border' as any, { ...options.border, type: e.target.value as any })}
                         className="bg-white/5 hover:bg-white/10 transition-colors border border-white/10 rounded px-2 py-1 text-xs outline-none focus:border-primary/50 cursor-pointer [&>option]:bg-zinc-900 [&>option]:text-white"
@@ -440,6 +464,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                             </div>
                             <input
                                 type="range"
+                                title="Border Width"
                                 min="1"
                                 max="20"
                                 step="1"
@@ -455,6 +480,7 @@ export function Controls({ options, onChange, className }: ControlsProps) {
                             </div>
                             <input
                                 type="range"
+                                title="Border Depth"
                                 min="0.2"
                                 max="10"
                                 step="0.2"

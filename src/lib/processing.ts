@@ -96,6 +96,20 @@ export async function processImage(
                         depth = 1.0 - val;
                     }
 
+                    const px = (i / 4) % targetWidth;
+                    const py = Math.floor((i / 4) / targetWidth);
+
+                    // --- SHAPE MASKING LOGIC ---
+                    if (options.shape?.type === 'circle') {
+                        const cx = targetWidth / 2;
+                        const cy = targetHeight / 2;
+                        const dCir = Math.sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+                        const maxRadiusPx = Math.min(targetWidth, targetHeight) / 2;
+                        if (dCir > maxRadiusPx) {
+                            depth = -1;
+                        }
+                    }
+
                     // --- MOUNTING HOLE LOGIC ---
                     if (options.mounting && options.mounting.enabled) {
                         const pixelSizeMm = options.pixelSize || 0.15;
@@ -107,8 +121,6 @@ export async function processImage(
                         const centerY = holeOffsetPx; // From top (y=0)
 
                         // Distance to hole center
-                        const px = (i / 4) % targetWidth;
-                        const py = Math.floor((i / 4) / targetWidth);
                         const dx = px - centerX;
                         const dy = py - centerY;
                         const distToHole = Math.sqrt(dx * dx + dy * dy);
@@ -126,13 +138,21 @@ export async function processImage(
                         const pixelSizeMm = options.pixelSize || 0.15;
                         const borderPixels = Math.round(bWidthMm / pixelSizeMm);
 
-                        const px = (i / 4) % targetWidth;
-                        const py = Math.floor((i / 4) / targetWidth);
-
                         let isInBorder = false;
-                        let t = 0; // 0=Outer Edge, 1=Inside (Touch Image) -> Wait, logic below used t=minDist/borderPixels (0=in, 1=out? No 0=edge)
+                        let t = 0; // 0=Outer Edge, 1=Inside
 
-                        if (options.border.type === 'oval') {
+                        if (options.shape?.type === 'circle') {
+                            const cx = targetWidth / 2;
+                            const cy = targetHeight / 2;
+                            const dCir = Math.sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+                            const maxRadiusPx = Math.min(targetWidth, targetHeight) / 2;
+
+                            if (dCir > (maxRadiusPx - borderPixels)) {
+                                isInBorder = true;
+                                t = (maxRadiusPx - dCir) / borderPixels;
+                                t = Math.max(0, Math.min(1, t));
+                            }
+                        } else if (options.border.type === 'oval') {
                             // --- OVAL MODE ---
                             // Normalized coordinates -1 to +1
                             const u = (px / (targetWidth - 1)) * 2 - 1;
@@ -252,7 +272,7 @@ export async function processImage(
                             }
 
                             // Convert MM Z to 0-1 Depth
-                            let borderVal = (targetBorderZ - zMin) / range;
+                            const borderVal = (targetBorderZ - zMin) / range;
 
                             // Blend if transparency? No, border is solid.
                             depth = borderVal;
